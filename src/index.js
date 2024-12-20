@@ -1,8 +1,41 @@
+import { SubscriptionClient } from 'subscriptions-transport-ws';
+import { ApolloClient, InMemoryCache, HttpLink, split } from '@apollo/client';
+import { getMainDefinition } from '@apollo/client/utilities';
+import gql from 'graphql-tag';
+
+const GRAPHQL_ENDPOINT_WS = 'ws://localhost:4000/graphql';
+const GRAPHQL_ENDPOINT_HTTP = '/graphql';
+
+const wsLink = new SubscriptionClient(GRAPHQL_ENDPOINT_WS, {
+  reconnect: true,
+});
+
+const httpLink = new HttpLink({
+  uri: GRAPHQL_ENDPOINT_HTTP,
+});
+
+const splitLink = split(
+  ({ query }) => {
+    const definition = getMainDefinition(query);
+    return (
+      definition.kind === 'OperationDefinition' &&
+      definition.operation === 'subscription'
+    );
+  },
+  wsLink,
+  httpLink
+);
+
+const apolloClient = new ApolloClient({
+  link: splitLink,
+  cache: new InMemoryCache(),
+});
+
 // Variables globales
 let tableroParaEliminar = null;
 
 // Función para cargar tableros desde la base de datos (GraphQL)
-function cargarTableros() {
+export function cargarTableros() {
     const tablerosContainer = document.getElementById("tablerosContainer");
 
     const query = `
@@ -37,10 +70,16 @@ function cargarTableros() {
               <h5 class="card-title">${tablero.titulo}</h5>
               <p class="card-text">${tablero.descripcion}</p>
               <p class="card-text"><small class="text-muted">Creado por: ${tablero.usuario}</small></p>
-              <button class="btn btn-primary" onclick="abrirTablero('${tablero.id}')">Abrir Tablero</button>
-              <button class="btn btn-danger" onclick="abrirModalEliminarTablero('${tablero.id}')">Eliminar</button>
+              <button class="btn btn-primary">Abrir Tablero</button>
+              <button class="btn btn-danger">Eliminar</button>
             </div>
           </div>`;
+          tableroCard.getElementsByClassName("btn-primary")[0].addEventListener("click", function () {
+            abrirTablero(tablero.id);
+          });
+          tableroCard.getElementsByClassName("btn-danger")[0].addEventListener("click", function () {
+            abrirModalEliminarTablero(tablero.id);
+          });
         tablerosContainer.appendChild(tableroCard);
       });
     })
@@ -48,12 +87,12 @@ function cargarTableros() {
 }
 
 // Función para abrir tablero y redirigir a tareas.html
-function abrirTablero(tableroId) {
+export function abrirTablero(tableroId) {
     window.location.href = `tareas.html?tablero=${tableroId}`;
 }
 
 // Función para mostrar el modal de confirmación de eliminación de tablero
-function abrirModalEliminarTablero(id) {
+export function abrirModalEliminarTablero(id) {
     tableroParaEliminar = id;
     const modalEliminarTablero = new bootstrap.Modal(document.getElementById("modalConfirmarEliminarTablero"));
     modalEliminarTablero.show();
@@ -108,6 +147,7 @@ const query = `
 `;
 
 // Mutación para crear un nuevo panel
+/*
 const mutation = `
   mutation CreatePanel($titulo: String!, $descripcion: String!, $usuario: String!) {
     createPanel(titulo: $titulo, descripcion: $descripcion, usuario: $usuario) {
@@ -142,3 +182,4 @@ fetch('/graphql', {
 .catch((error) => {
   console.error('Error en la solicitud:', error);
 });
+*/

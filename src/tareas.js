@@ -23,6 +23,8 @@ const query = `
 }
 `;
 
+document.getElementById("volverAlDashboardButton")?.addEventListener("click", volverAlDashboard);
+
 // Function to fetch tablero information
 async function fetchTableroInfo(tableroId) {
   try {
@@ -262,11 +264,17 @@ function agregarTareaAColumna(tarea, columna) {
     <p><strong>Fecha:</strong> ${tarea.fecha}</p>
     <p><strong>Hora:</strong> ${tarea.hora}</p>
     <p><strong>Responsable:</strong> ${tarea.responsable}</p>
-    <button class="btn btn-danger btn-sm" onclick="abrirModalEliminar('${tarea.id}')">Eliminar</button>
-    <button class="btn btn-warning btn-sm" onclick="abrirModalModificar('${tarea.id}')">Modificar</button>
+    <button class="btn btn-danger btn-sm">Eliminar</button>
+    <button class="btn btn-warning btn-sm">Modificar</button>
   `;
 
-  columna.appendChild(tareaDiv);
+  tareaDiv.getElementsByClassName("btn-danger")[0].addEventListener("click", function () {
+    abrirModalEliminar(tarea.id);
+  });
+  tareaDiv.getElementsByClassName("btn-warning")[0].addEventListener("click", function () {
+    abrirModalModificar(tarea.id);
+  });
+columna.appendChild(tareaDiv);
 }
 
 // Función para abrir el modal de confirmación de eliminación

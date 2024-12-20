@@ -6,6 +6,10 @@ const schema = require('./graphql/schema');
 const { Server } = require('socket.io');
 const http = require('http');
 const path = require('path');
+const pubsub = require('./pubsub');
+
+const { SubscriptionServer } = require('subscriptions-transport-ws');
+const { execute, subscribe } = require('graphql');
 
 const app = express();
 const server = http.createServer(app);
@@ -47,7 +51,21 @@ io.on('connection', (socket) => {
   console.log('Usuario conectado', socket.id);
 });
 
+
+
 // Iniciar el servidor
 server.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}/graphql`);
 });
+
+const subscriptionServer = SubscriptionServer.create(
+  {
+    schema,
+    execute,
+    subscribe,
+  },
+  {
+    server: server,
+    path: '/graphql',
+  },
+);

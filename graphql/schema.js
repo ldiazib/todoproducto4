@@ -1,6 +1,9 @@
-const { GraphQLObjectType, GraphQLString, GraphQLID, GraphQLList, GraphQLSchema, GraphQLNonNull } = require('graphql');
+const { GraphQLObjectType, GraphQLString, GraphQLBoolean, GraphQLID, GraphQLList, GraphQLSchema, GraphQLNonNull } = require('graphql');
 const Panel = require('../models/panel');
 const Task = require('../models/task');
+const { PubSub } = require('graphql-subscriptions');
+
+const pubsub = new PubSub();
 
 // Definición de tipo Panel
 const PanelType = new GraphQLObjectType({
@@ -110,7 +113,7 @@ const Mutation = new GraphQLObjectType({
         filePath: { type: GraphQLString }
       },
       resolve(parent, args) {
-        return Task.findByIdAndUpdate(
+        const taskData = Task.findByIdAndUpdate(
           args.id,
           {
             $set: {
@@ -125,6 +128,9 @@ const Mutation = new GraphQLObjectType({
           },
           { new: true }
         );
+        console.log("Publishing updateTask");
+        pubsub.publish("updateTask", { success: true, task: Task.findById(args.id) });
+        return taskData;
       }
     },
     addTask: {
@@ -165,7 +171,27 @@ const Mutation = new GraphQLObjectType({
   }
 });
 
+const Result = new GraphQLObjectType({
+  name: 'Result',
+  fields: () => ({
+    success: { type: GraphQLNonNull(GraphQLBoolean) },
+    message: { type: GraphQLString },
+    task: { type: TaskType }
+  })
+});
+
+const Subscription = new GraphQLObjectType({
+  name: 'Subscription',
+  fields: {
+    updateTask: {
+      type: Result,
+      subscribe: () => pubsub.asyncIterator('updateTask')
+    }
+  }
+});
+
 module.exports = new GraphQLSchema({
   query: RootQuery,
-  mutation: Mutation
+  mutation: Mutation,
+  subscription: Subscription
 });

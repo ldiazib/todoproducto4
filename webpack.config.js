@@ -23,6 +23,7 @@ module.exports = {
       },
     ],
   },
+  devtool: 'source-map', // Add this line to enable source maps
   devServer: {
     static: {
       directory: path.join(__dirname, 'public'),

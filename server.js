@@ -31,6 +31,10 @@ mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
 // Middleware
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
 
 // Middleware de GraphQL
 app.use('/graphql', graphqlHTTP({
@@ -51,14 +55,12 @@ io.on('connection', (socket) => {
   console.log('Usuario conectado', socket.id);
 });
 
-
-
-// Iniciar el servidor
-server.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}/graphql`);
+io.on('connection', (socket) => {
+  console.log('Usuario conectado', socket.id);
 });
 
-const subscriptionServer = SubscriptionServer.create(
+
+SubscriptionServer.create(
   {
     schema,
     execute,
@@ -69,3 +71,9 @@ const subscriptionServer = SubscriptionServer.create(
     path: '/graphql',
   },
 );
+
+// Iniciar el servidor
+server.listen(PORT, () => {
+  console.log(`Servidor corriendo en http://localhost:${PORT}/graphql`);
+});
+

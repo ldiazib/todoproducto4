@@ -1,3 +1,6 @@
+import apolloClient from "./subsclient";
+import gql from 'graphql-tag';
+
 // Obtener el ID del tablero actual desde la URL
 const params = new URLSearchParams(window.location.search);
 const tableroId = params.get("tablero");
@@ -25,6 +28,40 @@ const query = `
 
 document.getElementById("volverAlDashboardButton")?.addEventListener("click", volverAlDashboard);
 
+apolloClient.subscribe({
+  query: gql`
+    subscription updateTask {
+      updateTask {
+        success,
+        task {
+          id,
+          titulo,
+          descripcion,
+          fecha,
+          hora,
+          responsable,
+          estado
+        }
+      }
+    }
+  `,
+  variables: {}
+}).subscribe({
+  next (data) {
+    const updatedTask = data.data.task;
+    const tareaDiv = document.getElementById(updatedTask.id);
+    if (tareaDiv) {
+      tareaDiv.innerHTML = `
+        <p><strong>Título:</strong> ${updatedTask.titulo}</p>
+        <p><strong>Descripción:</strong> ${updatedTask.descripcion}</p>
+        <p><strong>Fecha:</strong> ${updatedTask.fecha}</p>
+        <p><strong>Hora:</strong> ${updatedTask.hora}</p>
+        <p><strong>Responsable:</strong> ${updatedTask.responsable}</p>
+      `;
+    }
+  }
+});
+
 // Function to fetch tablero information
 async function fetchTableroInfo(tableroId) {
   try {
@@ -44,7 +81,6 @@ async function fetchTableroInfo(tableroId) {
       console.log("Tablero cargado:", tablero);
 
       if (tablero) {
-        tareas = tablero.tasks || [];
         cargarTareas();
       } else {
         console.error(`Tablero no encontrado: ${tableroId}`);
@@ -255,8 +291,8 @@ function agregarTareaAColumna(tarea, columna) {
   tareaDiv.classList.add("tarea");
   tareaDiv.setAttribute("id", tarea.id);
   tareaDiv.setAttribute("draggable", "true");
-  tareaDiv.setAttribute("ondragstart", "drag(event)");
-  tareaDiv.setAttribute("ondragend", "endDrag(event)");
+  tareaDiv.ondragstart = drag;
+  tareaDiv.ondragend = endDrag;
 
   tareaDiv.innerHTML = `
     <p><strong>Título:</strong> ${tarea.titulo}</p>
@@ -327,8 +363,6 @@ document
 
   // Función para abrir el modal de modificar tarea
   async function abrirModalModificar(idTarea) {
-    tareaParaModificar = idTarea; 
-
     const queryTarea = `
       query {
         task(id: "${idTarea}") {
@@ -343,6 +377,7 @@ document
       }
     `;
 
+    let tarea = null;
     try {
       const response = await fetch("/graphql", {
         method: "POST",
@@ -375,72 +410,72 @@ document
       const modal = new bootstrap.Modal(
         document.getElementById("modalModificarTarea")
       );
+      // Función para guardar los cambios de la tarea modificada
+      document
+        .getElementById("formModificarTarea")
+        ?.addEventListener("submit", async function (event) {
+          event.preventDefault(); 
+      
+          const nuevoTitulo = document.getElementById("tituloModificarTarea").value;
+          const nuevaDescripcion = document.getElementById(
+            "descripcionModificarTarea"
+          ).value;
+          const nuevaFecha = document.getElementById("fechaModificarTarea").value;
+          const nuevaHora = document.getElementById("horaModificarTarea").value;
+          const nuevoResponsable = document.getElementById(
+            "responsableModificarTarea"
+          ).value;
+
+          const mutation = `
+            mutation {
+              updateTask(
+                id: "${idTarea}",
+                titulo: "${nuevoTitulo}",
+                descripcion: "${nuevaDescripcion}",
+                fecha: "${nuevaFecha}",
+                hora: "${nuevaHora}",
+                responsable: "${nuevoResponsable}"
+              ) {
+                id
+                titulo
+                descripcion
+                fecha
+                hora
+                responsable
+                estado
+              }
+            }
+          `;
+
+          try {
+            const response = await fetch("/graphql", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query: mutation }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+              console.log("Tarea actualizada con éxito:", data.data.updateTask);
+              cargarTareas();
+            } else {
+              console.error("Error al actualizar la tarea:", data.errors);
+            }
+          } catch (error) {
+            console.error("Error en la solicitud:", error);
+          }
+      
+          // Cerrar el modal de modificación
+          const modal = bootstrap.Modal.getInstance(
+            document.getElementById("modalModificarTarea")
+          );
+          modal.hide();
+        });
       modal.show();
     }
   }
   
-  // Función para guardar los cambios de la tarea modificada
-  document
-    .getElementById("formModificarTarea")
-    ?.addEventListener("submit", async function (event) {
-      event.preventDefault(); 
-  
-      const nuevoTitulo = document.getElementById("tituloModificarTarea").value;
-      const nuevaDescripcion = document.getElementById(
-        "descripcionModificarTarea"
-      ).value;
-      const nuevaFecha = document.getElementById("fechaModificarTarea").value;
-      const nuevaHora = document.getElementById("horaModificarTarea").value;
-      const nuevoResponsable = document.getElementById(
-        "responsableModificarTarea"
-      ).value;
-
-      const mutation = `
-        mutation {
-          updateTask(
-            id: "${tareaParaModificar}",
-            titulo: "${nuevoTitulo}",
-            descripcion: "${nuevaDescripcion}",
-            fecha: "${nuevaFecha}",
-            hora: "${nuevaHora}",
-            responsable: "${nuevoResponsable}"
-          ) {
-            id
-            titulo
-            descripcion
-            fecha
-            hora
-            responsable
-            estado
-          }
-        }
-      `;
-
-      try {
-        const response = await fetch("/graphql", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: mutation }),
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          console.log("Tarea actualizada con éxito:", data.data.updateTask);
-          cargarTareas();
-        } else {
-          console.error("Error al actualizar la tarea:", data.errors);
-        }
-      } catch (error) {
-        console.error("Error en la solicitud:", error);
-      }
-  
-      // Cerrar el modal de modificación
-      const modal = bootstrap.Modal.getInstance(
-        document.getElementById("modalModificarTarea")
-      );
-      modal.hide();
-    });
 
 // Formulario para crear una nueva tarea con archivo adjunto
 const form = document.getElementById("formNuevaTarea");
@@ -553,28 +588,3 @@ async function eliminarTarea(id) {
     console.error("Error en la solicitud:", error);
   }
 }
-
-
-const socket = io('');
-
-socket.on('newTask', (task) => {
-  agregarTareaAColumna(task, document.getElementById("to-do-column"));
-});
-
-socket.on('updateTask', (task) => {
-  const tareaDiv = document.getElementById(task.id);
-  if (tareaDiv) {
-    tareaDiv.innerHTML = `
-      <p><strong>Título:</strong> ${task.titulo}</p>
-      <p><strong>Descripción:</strong> ${task.descripcion}</p>
-      <p><strong>Fecha:</strong> ${task.fecha}</p>
-      <p><strong>Hora:</strong> ${task.hora}</p>
-      <p><strong>Responsable:</strong> ${task.responsable}</p>
-      ${task.filePath ? `<p><a href="${task.filePath}" target="_blank">Archivo Adjunto</a></p>` : ""}
-    `;
-  }
-});
-
-socket.on('deleteTask', (id) => {
-  document.getElementById(id)?.remove();
-});

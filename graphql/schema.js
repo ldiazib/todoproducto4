@@ -1,9 +1,7 @@
 const { GraphQLObjectType, GraphQLString, GraphQLBoolean, GraphQLID, GraphQLList, GraphQLSchema, GraphQLNonNull } = require('graphql');
 const Panel = require('../models/panel');
 const Task = require('../models/task');
-const { PubSub } = require('graphql-subscriptions');
-
-const pubsub = new PubSub();
+const pubsub = require('../pubsub');
 
 // Definición de tipo Panel
 const PanelType = new GraphQLObjectType({
@@ -110,10 +108,15 @@ const Mutation = new GraphQLObjectType({
         fecha: { type: GraphQLString },
         hora: { type: GraphQLString },
         responsable: { type: GraphQLString },
-        filePath: { type: GraphQLString }
+        filePath: { type: GraphQLString },
+        clientId: { type: GraphQLString }
       },
-      resolve(parent, args) {
-        const taskData = Task.findByIdAndUpdate(
+      async resolve(parent, args) {
+        console.log(args);
+        const clientId = args.clientId;
+        delete args.clientId;
+        const taskDataBeforeUpdate = await Task.findById(args.id);
+        const taskDataUpdated = await Task.findByIdAndUpdate(
           args.id,
           {
             $set: {
@@ -128,9 +131,16 @@ const Mutation = new GraphQLObjectType({
           },
           { new: true }
         );
-        console.log("Publishing updateTask");
-        pubsub.publish("updateTask", { success: true, task: Task.findById(args.id) });
-        return taskData;
+        let changeType;
+        if (taskDataBeforeUpdate.estado !== taskDataUpdated.estado) {
+          changeType = "estado";
+          console.log(`Estado cambiado ${taskDataBeforeUpdate.estado} -> ${taskDataUpdated.estado}`);
+        } else {
+          changeType = "task";
+        }
+        pubsub.publish("updateTask", { updateTask: { success: true, task: taskDataUpdated, changeType: changeType, previousState: taskDataBeforeUpdate.estado, clientId: clientId } });
+
+        return taskDataUpdated;
       }
     },
     addTask: {
@@ -176,7 +186,10 @@ const Result = new GraphQLObjectType({
   fields: () => ({
     success: { type: GraphQLNonNull(GraphQLBoolean) },
     message: { type: GraphQLString },
-    task: { type: TaskType }
+    task: { type: TaskType },
+    changeType: { type: GraphQLString },
+    previousState: { type: GraphQLString },
+    clientId: { type: GraphQLString }
   })
 });
 
@@ -185,7 +198,7 @@ const Subscription = new GraphQLObjectType({
   fields: {
     updateTask: {
       type: Result,
-      subscribe: () => pubsub.asyncIterator('updateTask')
+      subscribe: () => pubsub.asyncIterableIterator('updateTask')
     }
   }
 });

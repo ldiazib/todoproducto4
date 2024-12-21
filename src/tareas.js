@@ -1,5 +1,8 @@
 import apolloClient from "./subsclient";
 import gql from 'graphql-tag';
+import { v4 as uuidv4 } from 'uuid';
+
+const clientId = uuidv4();
 
 // Obtener el ID del tablero actual desde la URL
 const params = new URLSearchParams(window.location.search);
@@ -33,6 +36,9 @@ apolloClient.subscribe({
     subscription updateTask {
       updateTask {
         success,
+        changeType,
+        previousState,
+        clientId,
         task {
           id,
           titulo,
@@ -48,19 +54,57 @@ apolloClient.subscribe({
   variables: {}
 }).subscribe({
   next (data) {
-    const updatedTask = data.data.task;
-    const tareaDiv = document.getElementById(updatedTask.id);
-    if (tareaDiv) {
-      tareaDiv.innerHTML = `
-        <p><strong>Título:</strong> ${updatedTask.titulo}</p>
-        <p><strong>Descripción:</strong> ${updatedTask.descripcion}</p>
-        <p><strong>Fecha:</strong> ${updatedTask.fecha}</p>
-        <p><strong>Hora:</strong> ${updatedTask.hora}</p>
-        <p><strong>Responsable:</strong> ${updatedTask.responsable}</p>
-      `;
+    console.log("Subscription data:", data);
+    const updatedTask = data.data.updateTask;
+    const updatedClientId = updatedTask.clientId;
+    if (updatedClientId !== clientId) {
+      const previousState = updatedTask.previousState;
+      const task = updatedTask.task;
+      const tareaDiv = document.getElementById(task.id);
+      if (tareaDiv) {
+        refreshTaskData(tareaDiv, task);
+      }
+      if (updatedTask.changeType === "estado") {
+        const oldColumn = document.getElementById(`${previousState}-column`);
+        const newColumn = document.getElementById(`${task.estado}-column`);
+
+        if (oldColumn && newColumn) {
+          const taskElement = document.getElementById(task.id);
+          if (taskElement) {
+            // Animate the task movement
+            taskElement.style.transition = "transform 0.5s ease-in-out";
+            const oldRect = oldColumn.getBoundingClientRect();
+            const newRect = newColumn.getBoundingClientRect();
+            const deltaX = newRect.left - oldRect.left;
+            const deltaY = newRect.top - oldRect.top;
+
+            taskElement.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+
+            setTimeout(() => {
+              taskElement.style.transition = "";
+              taskElement.style.transform = "";
+              newColumn.appendChild(taskElement);
+            }, 500);
+          }
+        }
+      }
     }
-  }
+  },
+  error (error) {
+    console.error("Subscription error:", error);
+  },
 });
+
+function refreshTaskData(tareaDiv, task) {
+  let formattedDate = new Date(parseInt(task.fecha)).toISOString().split('T')[0];
+  tareaDiv.getElementsByClassName("task-data")[0].innerHTML = `
+        <p><strong>Título:</strong> ${task.titulo}</p>
+        <p><strong>Descripción:</strong> ${task.descripcion}</p>
+        <p><strong>Fecha:</strong> ${formattedDate}</p>
+        <p><strong>Hora:</strong> ${task.hora}</p>
+        <p><strong>Responsable:</strong> ${task.responsable}</p>
+      `;
+}
 
 // Function to fetch tablero information
 async function fetchTableroInfo(tableroId) {
@@ -184,7 +228,8 @@ async function drop(ev) {
       mutation {
         updateTask(
           id: "${task.id}",
-          estado: "${nuevoEstado}"
+          estado: "${nuevoEstado}",
+          clientId: "${clientId}"
         ) {
           id
           estado
@@ -294,15 +339,14 @@ function agregarTareaAColumna(tarea, columna) {
   tareaDiv.ondragstart = drag;
   tareaDiv.ondragend = endDrag;
 
+
   tareaDiv.innerHTML = `
-    <p><strong>Título:</strong> ${tarea.titulo}</p>
-    <p><strong>Descripción:</strong> ${tarea.descripcion}</p>
-    <p><strong>Fecha:</strong> ${tarea.fecha}</p>
-    <p><strong>Hora:</strong> ${tarea.hora}</p>
-    <p><strong>Responsable:</strong> ${tarea.responsable}</p>
+    <div class="task-data">
+    </div>
     <button class="btn btn-danger btn-sm">Eliminar</button>
     <button class="btn btn-warning btn-sm">Modificar</button>
   `;
+  refreshTaskData(tareaDiv, tarea);
 
   tareaDiv.getElementsByClassName("btn-danger")[0].addEventListener("click", function () {
     abrirModalEliminar(tarea.id);
@@ -398,6 +442,7 @@ document
 
     if (tarea) {
       // Rellenar el formulario del modal con los datos de la tarea
+      document.getElementById("idModificarTarea").value = tarea.id;
       document.getElementById("tituloModificarTarea").value = tarea.titulo;
       document.getElementById("descripcionModificarTarea").value =
         tarea.descripcion;
@@ -410,68 +455,6 @@ document
       const modal = new bootstrap.Modal(
         document.getElementById("modalModificarTarea")
       );
-      // Función para guardar los cambios de la tarea modificada
-      document
-        .getElementById("formModificarTarea")
-        ?.addEventListener("submit", async function (event) {
-          event.preventDefault(); 
-      
-          const nuevoTitulo = document.getElementById("tituloModificarTarea").value;
-          const nuevaDescripcion = document.getElementById(
-            "descripcionModificarTarea"
-          ).value;
-          const nuevaFecha = document.getElementById("fechaModificarTarea").value;
-          const nuevaHora = document.getElementById("horaModificarTarea").value;
-          const nuevoResponsable = document.getElementById(
-            "responsableModificarTarea"
-          ).value;
-
-          const mutation = `
-            mutation {
-              updateTask(
-                id: "${idTarea}",
-                titulo: "${nuevoTitulo}",
-                descripcion: "${nuevaDescripcion}",
-                fecha: "${nuevaFecha}",
-                hora: "${nuevaHora}",
-                responsable: "${nuevoResponsable}"
-              ) {
-                id
-                titulo
-                descripcion
-                fecha
-                hora
-                responsable
-                estado
-              }
-            }
-          `;
-
-          try {
-            const response = await fetch("/graphql", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query: mutation }),
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-              console.log("Tarea actualizada con éxito:", data.data.updateTask);
-              cargarTareas();
-            } else {
-              console.error("Error al actualizar la tarea:", data.errors);
-            }
-          } catch (error) {
-            console.error("Error en la solicitud:", error);
-          }
-      
-          // Cerrar el modal de modificación
-          const modal = bootstrap.Modal.getInstance(
-            document.getElementById("modalModificarTarea")
-          );
-          modal.hide();
-        });
       modal.show();
     }
   }
@@ -588,3 +571,83 @@ async function eliminarTarea(id) {
     console.error("Error en la solicitud:", error);
   }
 }
+
+function bindUpdateButton() {
+    // Función para guardar los cambios de la tarea modificada
+    document
+      .getElementById("formModificarTarea")
+      ?.addEventListener("submit", async function (event) {
+        event.preventDefault(); 
+        const idTarea = document.getElementById("idModificarTarea").value;
+    
+        const nuevoTitulo = document.getElementById("tituloModificarTarea").value;
+        const nuevaDescripcion = document.getElementById(
+          "descripcionModificarTarea"
+        ).value;
+        const nuevaFecha = document.getElementById("fechaModificarTarea").value;
+        const nuevaHora = document.getElementById("horaModificarTarea").value;
+        const nuevoResponsable = document.getElementById(
+          "responsableModificarTarea"
+        ).value;
+
+        const mutation = `
+          mutation {
+            updateTask(
+              id: "${idTarea}",
+              titulo: "${nuevoTitulo}",
+              descripcion: "${nuevaDescripcion}",
+              fecha: "${nuevaFecha}",
+              hora: "${nuevaHora}",
+              responsable: "${nuevoResponsable}",
+              clientId: "${clientId}"
+            ) {
+              id
+              titulo
+              descripcion
+              fecha
+              hora
+              responsable
+              estado
+            }
+          }
+        `;
+
+        try {
+          const response = await fetch("/graphql", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: mutation }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            console.log("Tarea actualizada con éxito:", data.data.updateTask);
+            refreshTaskData(document.getElementById(idTarea), data.data.updateTask);
+          } else {
+            console.error("Error al actualizar la tarea:", data.errors);
+          }
+        } catch (error) {
+          console.error("Error en la solicitud:", error);
+        }
+    
+        // Cerrar el modal de modificación
+        const modal = bootstrap.Modal.getInstance(
+          document.getElementById("modalModificarTarea")
+        );
+        modal.hide();
+      });
+}
+
+function bindEvents() {
+  const columns = document.getElementsByClassName("seccion-tareas");
+  for (const column of columns) {
+    column.ondragover = allowDrop;
+    column.ondrop = drop;
+    column.ondragenter = highlightColumn;
+    column.ondragleave = removeHighlight;
+  }
+  bindUpdateButton();
+}
+
+bindEvents();

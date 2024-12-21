@@ -39,10 +39,6 @@
           <div
             class="seccion-tareas columna-to-do"
             id="to-do-column"
-            ondrop="drop(event)"
-            ondragover="allowDrop(event)"
-            ondragenter="highlightColumn(event)"
-            ondragleave="removeHighlight(event)"
           >
             <h3 class="titulo-columna">To Do</h3>
           </div>
@@ -51,10 +47,6 @@
           <div
             class="seccion-tareas columna-doing"
             id="doing-column"
-            ondrop="drop(event)"
-            ondragover="allowDrop(event)"
-            ondragenter="highlightColumn(event)"
-            ondragleave="removeHighlight(event)"
           >
             <h3 class="titulo-columna">Doing</h3>
           </div>
@@ -63,10 +55,6 @@
           <div
             class="seccion-tareas columna-done"
             id="done-column"
-            ondrop="drop(event)"
-            ondragover="allowDrop(event)"
-            ondragenter="highlightColumn(event)"
-            ondragleave="removeHighlight(event)"
           >
             <h3 class="titulo-columna">Done</h3>
           </div>
@@ -163,6 +151,7 @@
       </div>
       <div class="modal-body">
         <form id="formModificarTarea" class="formulario-tarea">
+          <input type="hidden" id="idModificarTarea" />
           <div class="mb-3">
             <label for="tituloModificarTarea" class="form-label">Título</label>
             <input
